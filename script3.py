@@ -50,6 +50,26 @@ def write_result(result_line):
     with open(result_file, "a", encoding='utf-8') as f:
         f.write(result_line + "\n")
 
+def delete_log(file_log):
+    lines_to_delete = []
+    with open(file_log, "r", encoding='utf-8') as f:
+        for line in f:
+            time_str = line.strip("Time-Log")[1].strip()
+            old_time = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+            cur_time = datetime.now()
+            if cur_time - old_time < timedelta(days=7):
+                break
+            else:
+                lines_to_delete.append(line)
+
+    with open(file_log, "r", encoding='utf-8') as f:
+        all_lines = f.readlines()
+
+    with open(file_log, "w", encoding='utf-8') as f:
+        for line in all_lines:
+            if line not in lines_to_delete:
+                f.write(line)
+
 # Hàm xử lý log
 def detect_get_flood(file_path):
     ip_times = defaultdict(list)
@@ -101,3 +121,4 @@ def detect_get_flood(file_path):
 
 if __name__ == "__main__":
     detect_get_flood(log_access)
+    delete_log(log_access)
