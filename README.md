@@ -1,1 +1,1 @@
-# Thứ tự script tuân theo thứ tụ các bài
+# Thứ tự script tuân theo thứ tự các bài
