@@ -97,8 +97,6 @@ def detect_get_flood(file_path):
                     count += 1
                 else:
                     break
-            
-            
 
             if count > 120:
                 # bot hợp lệ, không chặn

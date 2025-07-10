@@ -38,7 +38,7 @@ def analyze_log(file_path):
         print(f"{browser}: {count} ({percent:.2f}%)")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-log_file = os.path.join(BASE_DIR, "gistfile1.txt")
+log_file = os.path.join(BASE_DIR, "gistfile2.txt")
 
-# log_file = "/home/lehongtrieu/Documents/Intern/gistfile1.txt"
+# log_file = "/home/lehongtrieu/Documents/Intern/gistfile2.txt"
 analyze_log(log_file)
