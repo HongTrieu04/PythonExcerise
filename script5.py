@@ -56,3 +56,6 @@ def count_ssl():
     for cip, count in cipher_counter.items():
         print(f"Cipher: {cip}, Count: {count}")
 
+if __name__ == '__main__':
+    # analyze_log("file-name")
+    count_ssl()

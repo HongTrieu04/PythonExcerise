@@ -3,10 +3,14 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import socket
 import os
+import redis
+
+r = redis.Redis(host='localhost', port=6379, db=0)  # Run redis server on localhost.
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 log_access = os.path.join(BASE_DIR, "access.log")
 result_file = os.path.join(BASE_DIR, "result_ip.txt")
+
 # Hàm parse dòng log để lấy IP, timestamp và method
 def parse_log_line(line):
     pattern = r'(\S+) (\S+) (\S+) \[([^\]]+)\] "(.*?)" (\d{3}) (\S+) "(.*?)" "(.*?)"'
@@ -21,11 +25,11 @@ def parse_log_line(line):
         dt = datetime.strptime(timestamp_str.split()[0], "%d/%b/%Y:%H:%M:%S")
 
         bot_type = "common-user"
-        if "google" in user_agent or "googlebot" in user_agent:
+        if "google" in user_agent:
             bot_type = "google"
-        elif "bing" in user_agent or "bingbot" in user_agent:
+        elif "bing" in user_agent:
             bot_type = "bing"
-        elif "facebook" in user_agent or "facebookexternalhit" in user_agent:
+        elif "facebook" in user_agent:
             bot_type = "facebook"
 
         # Parse method
@@ -33,6 +37,7 @@ def parse_log_line(line):
 
         return ip, dt, method, bot_type
     return None, None, None, None
+
 
 def verify_bot_ip(ip, domain):
     try:
@@ -46,34 +51,22 @@ def verify_bot_ip(ip, domain):
     except:
         return False
 
-def write_result(result_line):
-    with open(result_file, "a", encoding='utf-8') as f:
-        f.write(result_line + "\n")
 
-def delete_log(file_log):
-    lines_to_delete = []
-    with open(file_log, "r", encoding='utf-8') as f:
-        for line in f:
-            time_str = line.strip("Time-Log")[1].strip()
-            old_time = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-            cur_time = datetime.now()
-            if cur_time - old_time < timedelta(days=7):
-                break
-            else:
-                lines_to_delete.append(line)
+# Return True if user-agent has over 120 requests per 60 sec
+def count_requests(times, threshold=120, window_sec=60):
+    start = 0
+    for end in range(len(times)):
+        while (times[end] - times[start]).total_seconds() > window_sec:
+            start += 1
+        if end - start + 1 >= threshold:
+            return True
+    return False
 
-    with open(file_log, "r", encoding='utf-8') as f:
-        all_lines = f.readlines()
-
-    with open(file_log, "w", encoding='utf-8') as f:
-        for line in all_lines:
-            if line not in lines_to_delete:
-                f.write(line)
 
 # Hàm xử lý log
 def detect_get_flood(file_path):
     ip_times = defaultdict(list)
-
+    risk_ip = []
     # Đọc từng dòng log
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
@@ -82,41 +75,25 @@ def detect_get_flood(file_path):
                 ip_times[(ip, bot_type)].append(dt)
 
     # Kiểm tra IP nào có >120 request trong vòng 60s
-    iptables = []
-
     for (ip, bot_type), times in ip_times.items():
-        times.sort()  # Sắp xếp thời gian tăng dần
 
-        for i in range(len(times)):
-            start = times[i]
-            count = 1
-
-            # Đếm số request trong 60s từ thời điểm hiện tại
-            for j in range(i + 1, len(times)):
-                if (times[j] - start).total_seconds() <= 60:
-                    count += 1
-                else:
-                    break
-
-            if count > 120:
-                # bot hợp lệ, không chặn
-                if ((bot_type == "google" and verify_bot_ip(ip, "google.com"))
+        if not count_requests(times):
+            continue
+        else:
+            if ((bot_type == "google" and verify_bot_ip(ip, "google.com"))
                     or (bot_type == "bing" and verify_bot_ip(ip, "search.msn.com"))
                     or (bot_type == "facebook" and verify_bot_ip(ip, "facebook.com"))
-                ):
-                    break
+            ):
+                continue
+            else:
+                risk_ip_log = f"{ip} - {bot_type}"
+                log_key = f"{ip}:{datetime.now().isoformat()}"
+                r.set(name=log_key, value=risk_ip_log, ex=604800)
+                risk_ip.append((ip, bot_type))
 
-                iptables.append((ip, count, start.strftime("%d/%b/%Y:%H:%M:%S")))
-                break
-
-    for ip, count, start_time in iptables:
-        time_write_log =  datetime.now()
-        res = f"{ip} {count} Start Time: {start_time} Time-Log: {time_write_log}"
-        write_result(res)
-        # print(f"[!] IP {ip} có {count} GET requests trong vòng 60s tại {start_time}")
-
-
+    # Print the results to fix bug.
+    for (ip, bot_type) in risk_ip:
+        print(ip, bot_type)
 
 if __name__ == "__main__":
     detect_get_flood(log_access)
-    delete_log(log_access)
