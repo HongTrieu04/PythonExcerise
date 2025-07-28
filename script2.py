@@ -19,11 +19,11 @@ def analyze_log(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
             parts = component_of_log(line)
-            if parts:
-                result_line = ""
-                for i in range(7):                
-                    result_line += parts[i] + " "
-                write_result(result_line.strip()) 
+            if len(parts) == 9:
+                # Chỉ lấy 7 trường đầu tiên: host, ident, authuser, [date], "request", status, bytes
+                common_log_format = parts[:7]
+                result_line = ' '.join(common_log_format)
+                write_result(result_line)
 
 
 # log_file = "/home/lehongtrieu/Documents/Intern/access.log"

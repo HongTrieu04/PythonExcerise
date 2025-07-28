@@ -3,6 +3,8 @@ import re
 from collections import defaultdict
 import os
 
+USER_AGENT_INDEX = 2
+
 def detect_browser(line):
     return parse(line).browser.family
 
@@ -11,9 +13,12 @@ def analyze_log(file_path):
 
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
+            # Tách dòng log thành các chuỗi có trong dấu ""
             matches = re.findall(r'"(.*?)"', line)
-            if len(matches) >= 3:
-                user_agent = matches[2]
+            # Chuỗi có chứa user_agent là chuỗi thứ 3 trong dấu ""
+            # KIểm tra độ dài matches để đảm bảo có dòng log được tách có đủ chuỗi chứa user_agent
+            if len(matches) > USER_AGENT_INDEX:
+                user_agent = matches[USER_AGENT_INDEX]
                 browser = detect_browser(user_agent)
                 browser_count[browser] += 1
 

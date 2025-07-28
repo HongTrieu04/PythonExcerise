@@ -53,10 +53,10 @@ def verify_bot_ip(ip, domain):
 
 
 # Return True if user-agent has over 120 requests per 60 sec
-def count_requests(times, threshold=120, window_sec=60):
+def count_requests(times, threshold=120, time_check=60):
     start = 0
     for end in range(len(times)):
-        while (times[end] - times[start]).total_seconds() > window_sec:
+        while (times[end] - times[start]).total_seconds() > time_check:
             start += 1
         if end - start + 1 >= threshold:
             return True
@@ -89,6 +89,7 @@ def detect_get_flood(file_path):
                 risk_ip_log = f"{ip} - {bot_type}"
                 log_key = f"{ip}:{datetime.now().isoformat()}"
                 r.set(name=log_key, value=risk_ip_log, ex=604800)
+                # Thêm vào list để in ra kiểm tra.
                 risk_ip.append((ip, bot_type))
 
     # Print the results to fix bug.
