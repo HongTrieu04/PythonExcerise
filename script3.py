@@ -51,50 +51,54 @@ def verify_bot_ip(ip, domain):
     except:
         return False
 
+# Lưu các time theo ip vào redis và xóa đi các time nằm ngoài khoảng 60s so với cái vừa lưu vào.
+def process_ip_request(ip, dt):
+    key = f"req:{ip}"
+    ts = dt.timestamp()
 
-# Return True if user-agent has over 120 requests per 60 sec
-def count_requests(times, threshold=120, time_check=60):
-    start = 0
-    for end in range(len(times)):
-        while (times[end] - times[start]).total_seconds() > time_check:
-            start += 1
-        if end - start + 1 >= threshold:
-            return True
-    return False
+    # Dùng counter theo thời gian
+    counter_key = f"counter:{ip}:{int(ts)}"     # Tạo key phụ cho các request cùng ip và cùng time
+    counter = r.incr(counter_key)           # Tăng giá trị đếm nếu lặp lại cái key đó.
 
+    # Đặt thời hạn tự hủy cho counter (vì chỉ cần tạm trong quá trình xử lý)
+    r.expire(counter_key, 120)
+
+    # Tạo member duy nhất dạng "timestamp:counter"
+    member = f"{ts}:{counter}"      # Có dạng: 1443436592.0:1, 1443436592.0:2
+
+    r.zadd(key, {member: ts})
+    r.zremrangebyscore(key, 0, ts - 60)
+
+    count = r.zcard(key)
+    return count >= 120
 
 # Hàm xử lý log
 def detect_get_flood(file_path):
-    ip_times = defaultdict(list)
     risk_ip = []
     # Đọc từng dòng log
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
             ip, dt, method, bot_type = parse_log_line(line)
             if ip and method == "GET":
-                ip_times[(ip, bot_type)].append(dt)
+                # print(ip, method, bot_type, dt)
+                if process_ip_request(ip, dt):
+                    block_key = f"blocked:{ip}"
+                    if r.exists(block_key):
+                        continue
 
-    # Kiểm tra IP nào có >120 request trong vòng 60s
-    for (ip, bot_type), times in ip_times.items():
+                    # Nếu là bot hợp lệ thì bỏ qua
+                    if (
+                            (bot_type == "google" and verify_bot_ip(ip, "google.com")) or
+                            (bot_type == "bing" and verify_bot_ip(ip, "search.msn.com")) or
+                            (bot_type == "facebook" and verify_bot_ip(ip, "facebook.com"))
+                    ):
+                        continue
 
-        if not count_requests(times):
-            continue
-        else:
-            if ((bot_type == "google" and verify_bot_ip(ip, "google.com"))
-                    or (bot_type == "bing" and verify_bot_ip(ip, "search.msn.com"))
-                    or (bot_type == "facebook" and verify_bot_ip(ip, "facebook.com"))
-            ):
-                continue
-            else:
-                risk_ip_log = f"{ip} - {bot_type}"
-                log_key = f"{ip}:{datetime.now().isoformat()}"
-                r.set(name=log_key, value=risk_ip_log, ex=604800)
-                # Thêm vào list để in ra kiểm tra.
-                risk_ip.append((ip, bot_type))
-
-    # Print the results to fix bug.
-    for (ip, bot_type) in risk_ip:
-        print(ip, bot_type)
+                    # Cảnh báo IP và set block key
+                    risk_ip_log = f"{ip} - {bot_type}"
+                    r.set(block_key, "1", ex=604800)  # 7 ngày
+                    # Print kết quả để kiểm tra logic.
+                    print(f"Added to Redis: {ip} → {risk_ip_log}")
 
 if __name__ == "__main__":
     detect_get_flood(log_access)
